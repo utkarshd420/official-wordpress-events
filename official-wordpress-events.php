@@ -11,8 +11,6 @@ class Official_WordPress_Events {
 	const MEETUP_API_BASE_URL   = 'https://api.meetup.com/';
 	const MEETUP_MEMBER_ID      = 72560962;
 	const POSTS_PER_PAGE        = 50;
-
-
 	/*
 	 * @todo
 	 *
@@ -26,6 +24,7 @@ class Official_WordPress_Events {
 	 * Constructor
 	 */
 	public function __construct() {
+		add_action( 'wp_ajax_nopriv_infinite_scroll' ,  array( $this, 'infinite_scroll_func' ) );
 		add_shortcode( 'official_wordpress_events', array( $this, 'render_events' ) );
 	}
 
@@ -34,8 +33,7 @@ class Official_WordPress_Events {
 	 */
 	public function render_events() {
 		$events = $this->get_all_events();
-		
-		if ( $events ) {
+	if ( $events ) {
 			require_once( __DIR__ . '/template-events.php' );
 		}
 	}
@@ -47,9 +45,29 @@ class Official_WordPress_Events {
 	 */
 	protected function get_all_events() {
 		$events = array_merge( $this->get_wordcamp_events(), $this->get_meetup_events() );
+
 		usort( $events, array( $this, 'sort_events' ) );
 		
 		return $events;
+	}
+	/**
+	* Infinite Scroll functionality added
+	*/
+
+	public function infinite_scroll_func() {
+		$off =	$_POST[ 'off' ];
+		$off = $off + 1;
+		if ( $tempEvents = $this->get_meetup_events( $off ) ) {
+			usort( $tempEvents, array( $this, 'sort_events' ) );
+			foreach ( $tempEvents as $event ) :
+			echo( '
+			<li>
+				<a href="' . esc_attr( esc_url( $event->url ) ) . '">' . esc_html( $event->title ) . '</a><br />' .
+				esc_html( date( "l, F jS | g:i a", (int) $event->start_timestamp ) ).'<br />'.
+				esc_html( $event->location ) . '</li>' );
+			endforeach;
+		}
+		wp_die();
 	}
 
 	/**
@@ -77,8 +95,9 @@ class Official_WordPress_Events {
 	protected function get_wordcamp_events() {
 		$events    = array();
 		$response  = $this->remote_get( self::WORDCAMP_API_BASE_URL . '/posts/?type=wordcamp' );
+	
 		$wordcamps = json_decode( wp_remote_retrieve_body( $response ) );
-		
+	
 		if ( $wordcamps ) {
 			foreach ( $wordcamps as $wordcamp ) {
 				if ( isset( $wordcamp->post_meta->{'Start Date (YYYY-mm-dd)'}[0] ) && $wordcamp->post_meta->{'Start Date (YYYY-mm-dd)'}[0] < time() ) {
@@ -104,21 +123,20 @@ class Official_WordPress_Events {
 
 	/**
 	 * Get WordPress meetups from the Meetup.com API
-	 *
+	 * @param $offset
 	 * @return array
 	 */
-	protected function get_meetup_events() {
+	protected function get_meetup_events( $offset = 0 ) {
 		$events = array();
-
 		if ( ! defined( 'MEETUP_API_KEY' ) || ! MEETUP_API_KEY || ! $groups = $this->get_meetup_group_ids() ) {
 			return $events;
 		}
-		
 		$response = $this->remote_get( sprintf(
-			'%s2/events?group_id=%s&time=0,1m&page=%d&key=%s',
+			'%s2/events?group_id=%s&time=0,1m&page=%d&offset=%d&key=%s',
 			self::MEETUP_API_BASE_URL,
 			implode( ',', $groups ),
 			self::POSTS_PER_PAGE,
+			$offset,
 			MEETUP_API_KEY
 		) );
 
@@ -167,7 +185,7 @@ class Official_WordPress_Events {
 		if ( ! defined( 'MEETUP_API_KEY' ) || ! MEETUP_API_KEY ) {
 			return array();
 		}
-		
+
 		$response = $this->remote_get( sprintf(
 			'%s2/profiles?&member_id=%d&key=%s',
 			self::MEETUP_API_BASE_URL,
@@ -176,7 +194,6 @@ class Official_WordPress_Events {
 		) );
 
 		$group_ids = json_decode( wp_remote_retrieve_body( $response ) );
-	
 		if ( ! empty ( $group_ids->results ) ) {
 			$group_ids = wp_list_pluck( $group_ids->results, 'group' );
 			$group_ids = wp_list_pluck( $group_ids, 'id' );
@@ -242,7 +259,6 @@ class Official_WordPress_Events {
 
 		return $response;
 	}
-}
-
-require_once( __DIR__ . DIRECTORY_SEPARATOR . 'official-wordpress-event.php' );
-$GLOBALS['Official_WordPress_Events'] = new Official_WordPress_Events();
+}	
+	require_once( __DIR__ . DIRECTORY_SEPARATOR . 'official-wordpress-event.php' );
+	$GLOBALS['Official_WordPress_Events'] = new Official_WordPress_Events();
