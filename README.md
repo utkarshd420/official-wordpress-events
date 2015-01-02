@@ -1,6 +1,9 @@
 Plugin Name: Official WordPress Events
+
 Description: Retrieves data on official WordPress events
+
 Version:     0.1
+
 Author:      WordPress.org Meta Team
 
 
